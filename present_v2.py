@@ -42,7 +42,7 @@ class BotPresensi():
                             break
                         else:
                             print("[*] Check : " + i_url)
-                            key = raw_input("Press any keys")
+                            key = input("Press any keys")
                             break
                     else:
                         sys.stdout.write("\r[*] " + str(self.getUnixTime()) + " != " + str(i_time))
