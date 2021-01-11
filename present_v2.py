@@ -1,123 +1,133 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*- 
 
-import requests, re, time, sys
-from bs4 import BeautifulSoup
+import requests, time, re, sys, os.path
+from furl import furl
+from bs4 import BeautifulSoup as bs4
 
-#ur credentials here :)
-usr = "xxxxx"
-pwd = "xxxxx"
+sess = requests.Session()
+target = "https://skansaba.id/" #moodle_target
+usr = "xxxxxx" #username
+pwd = "xxxxxx" #password
 
-
-
-class BotPresensi():
-    '''
+def banner():
+	print("""
 ..............,,.........
-|  （✿ ͡◕ ᴗ◕)つ━━✫・。   | Version : v.2
-|      Tidak Perlu      | Author : FilthyRoot
-| Bangun Pagi Onii-chan | Github : @soracyberteam
+|  （✿ ͡◕ ᴗ◕)つ━━✫・*。	|
+|      Tidak Perlu      | Author : Hieki.exe
+| Bangun Pagi Onii-chan | Github : @Mhankk
 .........................
-    '''
-    target = "https://skansaba.id/"
-    def __init__(self, username, password):
-        self.username = username
-        self.password = password
+""")
+def get_token(target):
+    r = sess.get(target + "/login/index.php")
+    s = bs4(r.text, "html.parser").find("input", attrs={'name': 'logintoken'})
+    return s.get("value")
 
-        self.s = requests.Session()
-        self.getToken()
-        print(self.__doc__)
+def login_moodle(target, user, passwd,token):
+    data = {
+        'logintoken': token,
+        'username': user,
+        'password': passwd,
+    }
+    r = sess.post(target + "/login/index.php", data = data)
+    if re.search("loginerrormessage", r.text) or re.search("Anda belum login.", r.text) or re.search("Invalid login, please try again",r.text):
+        return False
+    else:
+        return True
 
-        if self.doLogin():
-            print("[*] Login Success")
-            self.getEvents()
-            for i in self.events:
-                i_url   = i[0]
-                i_time  = i[1]
-                print("[*] Next to Present : " + i_url)
-                while 1:
-                    if self.getUnixTime() == i_time:
-                        self.doLogin()
-                        if doPresensi(i_url):
-                            print("[*] Done : " + i_url)
-                            break
-                        else:
-                            print("[*] Check : " + i_url)
-                            key = input("Press any keys")
-                            break
-                    else:
-                        sys.stdout.write("\r[*] " + str(self.getUnixTime()) + " != " + str(i_time))
+def get_unix_time():
+	return int(time.time())
 
+def get_acara():
+	data = []
+	r = sess.get(target + "/my/")
+	s = bs4(r.text, "html.parser").find_all('div', attrs={'class':'event'})
+	for i in s:
+		if re.search('attendance', str(i)):
+			data.append(str(i))
+	return data
 
-        else:
-            print("Check ur credentials plz :)")
+token = get_token(target)
+def get_presensi_id(x):
+	try:
+		login_moodle(target, usr, pwd, token)
+		r = sess.get(x)
+		s = bs4(r.text, "html.parser").find('a', attrs={'class':'card-link'})
+		return s.get('href')
+	except:
+		return("[Check] " + x)
+def get_timer():
+	ori_stdout = sys.stdout
+	if(login_moodle(target, usr, pwd, token)):
+		with open('/tmp/__time__.txt', 'w') as f:
+			sys.stdout = f
+			for i in get_acara():
+				x = bs4(i, 'html.parser').find('a').get('href')
+				print(x)
+			sys.stdout = ori_stdout
+			f.close()
+def get_sesskey(text):
+	s = bs4(text, "html.parser").find("input", attrs={'name': 'sesskey'})
+	return(s.get('value'))
+def get_sessid(text):
+	s = bs4(text, "html.parser").find("input", attrs={'name': 'sessid'})
+	return(s.get('value'))
+def get_status(text):
+	s = bs4(text, "html.parser").find("input", attrs={'type': 'radio', 'name': 'status'})
+	return(s.get('value'))
+def do_presensi(xx):
+	try:
+		login_moodle(target, usr, pwd, token)
+		r = sess.get(xx)
+		s = bs4(r.text, "html.parser").find_all('a')
+		for i in s:
+			if re.search('attendance.php', str(i)):
+				o = sess.get(str(i.get('href')))
+				if re.search("fdescription required", o.text):
+					print("[*] Submitting Form to Present")
+					data = {'sessid': get_sessid(o.text), 'sesskey': get_sesskey(o.text), 'sesskey': get_sesskey(o.text), '_qf__mod_attendance_student_attendance_form': 1, 'mform_isexpanded_id_session': 1, 'status': get_status(o.text), 'submitbutton': 'Simpan+perubahan'}
+					p = sess.post(target + "/mod/attendance/attendance.php", data=data, headers={'Referer': str(i.get('href'))})
+		return('[Done] ' + xx)
+	except:
+		return("[Check] " + xx)
 
-    def getUnixTime(self):
-        return int(time.time())
-    def doLogin(self):
-        data    = {
-        'logintoken': self.logintoken,
-        'username': self.username,
-        'password': self.password,
-        } 
-        r       = self.s.post(BotPresensi.target + "/login/index.php", data = data)
-        if re.search("loginerrormessage", r.text):
-            return False
-        else:
-            return True
+banner()
+def start():
+	if os.path.isfile('/tmp/__time__.txt'):
+		print("[!] Timestamp found!")
+		f = open('/tmp/__time__.txt', 'r')
+		x = f.read()
+		print(x)
+		act = raw_input('[*] Is this Timestamp valid? (y/n) ')
+		if act == "n":
+			print("[*] Grabbing Timestamp ...")
+			get_timer()
+			start()
+		else:
+			login_moodle(target, usr, pwd, token)
+			for i in x.split("\n"):
+				if i == '': continue
+				timey = get_unix_time()
+				timex = int(furl(i.replace(target, '')).args['time'])
+				pres_id = get_presensi_id(i)
+				if timey > timex:
+					print(do_presensi(str(pres_id)))
+				else:
+					while(True):
+						if get_unix_time() == int(furl(i.replace(target, '')).args['time']):
+							print("")
+							print(do_presensi(str(pres_id)))
+							#sys.stdout.write("\r[*] " + str(get_unix_time()) + " != " + str(int(furl(i.replace(target, '')).args['time'])))
+						elif get_unix_time() + 300 == int(furl(i.replace(target, '')).args['time']):
+							print("")
+							print(do_presensi(str(pres_id)))
+							break
+						else:
+							sys.stdout.write("\r[*] " + str(get_unix_time()) + " != " + str(int(furl(i.replace(target, '')).args['time'])))
 
-    def getToken(self):
-        r  = self.s.get(BotPresensi.target + "/login/index.php")
-        bs = BeautifulSoup(r.text, "html.parser").find("input", attrs={'name': 'logintoken'}) 
-        self.logintoken = bs.get("value")
-
-    def getEvents(self):
-        r       = self.s.get(BotPresensi.target + "/calendar/view.php?view=day")
-        bs      = BeautifulSoup(r.text, "html.parser").find_all('div', attrs={'data-type': 'event'})
-        self.events = []
-        for i in bs:
-            #ata.append(str(i))
-            if re.search("attendance", str(i)):
-                bs2 = BeautifulSoup(str(i), "html.parser")
-                #get time
-                time    = bs2.find('div', attrs={'class': 'description card-body'}).find('a').get('href').replace(BotPresensi.target+"calendar/view.php?view=day&time=", '')
-
-                mapel   = bs2.find('div', attrs={'class': 'card-footer text-right bg-transparent'}).find('a').get('href')
-                
-                self.events.append([mapel, time])
-
-
-    def doPresensi(self, target):
-        r   = self.s.get(target)
-        bs  = BeautifulSoup(r.text, "html.parser").find("a")
-
-        for i in bs:
-            if re.search("attendance.php", str(i)):
-                r2 = self.s.get(str(i.get("href")))
-                if re.search("fdescription required", r2.text):
-                        #get sess
-                        bs2 = BeautifulSoup(r2.text, "html.parser")
-                        self.sessid     = bs2.find("input", attrs={'name': 'sessid'}).get('value')
-                        self.sesskey    = bs2.find("input", attrs={'name': 'sesskey'}).get('value')
-                        self.status     = bs2.find("input", attrs={'type': 'radio', 'name': 'status'}).get('value')
-
-                        #submit to present
-                        data = {
-                        'sessid': self.sessid,
-                        'sesskey': self.sesskey,
-                        '_qf__mod_attendance_student_attendance_form': 1,
-                        'mform_isexpanded_id_session': 1,
-                        'status': self.status,
-                        'submitbutton': 'Simpan+perubahan',
-                        }
-
-                        r3  = self.s.post(BotPresensi.target + "/mod/attendance/attendance.php", data = data, headers = {'Referer': str(i.get('href'))})
-                return True
-            else:
-                return False
-
-
-
-
-
-if __name__ == '__main__':
-    app = BotPresensi(usr, pwd)
+	else:
+		print("[*] Timestamp tidak ditemukan")
+		print("[*] Grabbing Timestamp ...")
+		get_timer()
+		start()
+start()
