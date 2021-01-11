@@ -15,9 +15,6 @@ Jika bermasalah silahkan sesuaikan dengan web sekolah anda. (dibagian scrap teru
 Requirements :
 - python 3
 - requests
-- re 
-- time 
-- sys 
 - bs4 
 <br>
 
